@@ -1,0 +1,23 @@
+name: Publish Docker
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
+    - name: test
+      run: |
+        go get -u golang.org/x/lint/golint
+        golint -set_exit_status
+        go test -v ./...
+    - uses: mr-smithers-excellent/docker-build-push@v5
+      with:
+        image: j18e/elvanto-overview
+        registry: docker.io
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        addLatest: true
+        addTimestamp: false
