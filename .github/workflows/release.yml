@@ -8,11 +8,6 @@ jobs:
     - uses: actions/setup-go@v2
       with:
         go-version: 1.17
-    - name: test
-      run: |
-        go get -u golang.org/x/lint/golint
-        golint -set_exit_status
-        go test -v ./...
     - uses: mr-smithers-excellent/docker-build-push@v5
       with:
         image: j18e/elvanto-overview
