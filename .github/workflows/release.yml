@@ -17,7 +17,7 @@ jobs:
       with:
         image: j18e/elvanto-overview
         registry: docker.io
-        username: ${{ secrets.DOCKER_USERNAME }}
+        username: j18e
         password: ${{ secrets.DOCKER_PASSWORD }}
         addLatest: true
         addTimestamp: false
