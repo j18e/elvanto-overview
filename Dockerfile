@@ -10,7 +10,7 @@ COPY go.sum .
 
 RUN go mod download
 
-COPY main.go models.go ./
+COPY main.go data.go models.go ./
 RUN go build -o ./elvanto-oversikt .
 
 FROM alpine:3.14

@@ -1,14 +1,14 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	urlpkg "net/url"
+	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,67 +22,110 @@ func main() {
 }
 
 func run() error {
-	bs, err := ioutil.ReadFile("apikey")
-	if err != nil {
-		return err
+	clientID := os.Getenv("CLIENT_ID")
+	clientSecret := os.Getenv("CLIENT_SECRET")
+	redirectURI := os.Getenv("REDIRECT_URI")
+	dataFile := os.Getenv("DATA_FILE")
+
+	if clientID == "" {
+		return errors.New("required env var CLIENT_ID")
 	}
-	apikey := strings.TrimSpace(string(bs))
-
-	services, err := loadServices(apikey)
-	if err != nil {
-		return err
+	if clientSecret == "" {
+		return errors.New("required env var CLIENT_SECRET")
+	}
+	if redirectURI == "" {
+		return errors.New("required env var REDIRECT_URI")
+	}
+	if dataFile == "" {
+		return errors.New("required env var DATA_FILE")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.NewTicker(time.Hour).C:
-				res, err := loadServices(apikey)
-				if err != nil {
-					log.Errorf("loading services: %v", err)
-					continue
-				}
-				services = res
-			}
-		}
-	}()
+	srv := &Server{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		RedirectURI:  redirectURI,
+		httpCli:      &http.Client{Timeout: time.Second * 10},
+	}
 
 	r := gin.Default()
 	r.LoadHTMLGlob("template.html")
-	r.GET("/", func(c *gin.Context) {
-		c.HTML(200, "template.html", services)
-	})
-	r.POST("/reload", func(c *gin.Context) {
-		res, err := loadServices(apikey)
-		if err != nil {
-			c.AbortWithError(500, fmt.Errorf("loading services: %v", err))
-			return
-		}
-		services = res
-		c.Redirect(http.StatusFound, "/")
-	})
+	r.GET("/login", srv.login)
+	r.GET("/login/complete", srv.completeLogin)
+	r.GET("/", srv.overview)
 	listenAddr := ":3000"
 	log.Infof("listening on %s", listenAddr)
 	return r.Run(listenAddr)
 }
 
-func loadServices(apikey string) ([]ServiceType, error) {
+type Server struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURI  string
+	httpCli      *http.Client
+}
+
+func (s *Server) overview(c *gin.Context) {
+	tok := ""
+	services, err := s.loadServices(tok)
+	if err != nil {
+		c.AbortWithError(500, err)
+	}
+	c.HTML(200, "template.html", services)
+}
+
+func (s *Server) login(c *gin.Context) {
+	const uri = "https://api.elvanto.com/oauth?type=web_server&client_id=%s&redirect_uri=%s&scope=%s"
+	c.Redirect(http.StatusFound, fmt.Sprintf(uri, s.ClientID, s.RedirectURI, "ManageServices"))
+}
+
+func (s *Server) completeLogin(c *gin.Context) {
+	const uri = "https://api.elvanto.com/oauth/token"
+
+	var data struct {
+		Code string `form:"code"`
+	}
+	if err := c.ShouldBindQuery(&data); err != nil {
+		c.String(400, "code not found")
+		return
+	}
+
+	vals := make(urlpkg.Values)
+	vals.Set("grant_type", "authorization_code")
+	vals.Set("client_id", s.ClientID)
+	vals.Set("client_secret", s.ClientSecret)
+	vals.Set("code", data.Code)
+	vals.Set("redirect_uri", s.RedirectURI)
+
+	res, err := s.httpCli.PostForm(uri, vals)
+	if err != nil {
+		c.AbortWithError(500, fmt.Errorf("making request: %w", err))
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode > 399 {
+		c.AbortWithError(500, fmt.Errorf("requesting token: status %s", res.Status))
+		return
+	}
+
+	bs, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		c.AbortWithError(500, fmt.Errorf("reading body: %w", err))
+		return
+	}
+	c.String(200, string(bs))
+}
+
+func (s *Server) loadServices(token string) ([]ServiceType, error) {
 	url := "https://api.elvanto.com/v1/services/getAll.json?page=1&page_size=100&status=published&fields[0]=volunteers"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
-	req.SetBasicAuth(apikey, "x")
+	req.SetBasicAuth(token, "x")
+	req.Header.Set("Authorization", "Bearer "+token)
 
-	req.Form = make(urlpkg.Values)
-
-	cli := &http.Client{Timeout: time.Second * 10}
-	res, err := cli.Do(req)
+	res, err := s.httpCli.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("making request: %w", err)
 	}
