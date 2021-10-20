@@ -1,8 +1,9 @@
-package main
+package repositories
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	bolt "go.etcd.io/bbolt"
 )
@@ -18,6 +19,16 @@ type Tokens struct {
 
 func NewRepository(file string) (*Repository, error) {
 	db, err := bolt.Open(file, 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(bucketName)
+		if err != nil {
+			return fmt.Errorf("create bucket: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -10,11 +10,6 @@
 
   <h1 class="py-3">Oversikt</h1>
 
-  <form class="pb-4" action="/reload" method="POST">
-    <button type="submit" class="btn btn-primary">Reload</button>
-  </form>
-
-
   <div class="accordion" id="svcAccordion">
     {{- range $i, $type := . }}
     <div class="accordion-item">

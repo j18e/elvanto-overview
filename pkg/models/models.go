@@ -1,9 +1,39 @@
-package main
+package models
 
 import (
 	"encoding/json"
 	"fmt"
 )
+
+type ServiceType struct {
+	Type     string
+	Services []Service
+}
+
+type Service struct {
+	Name       string
+	Location   string
+	Date       string
+	Volunteers []Volunteer
+}
+
+func (s Service) String() string {
+	res := fmt.Sprintf("%s: %s at %s:", s.Date, s.Name, s.Location)
+	for _, v := range s.Volunteers {
+		res += "\n\t" + v.String()
+	}
+	return res
+}
+
+type Volunteer struct {
+	Name       string
+	Department string
+	Position   string
+}
+
+func (v Volunteer) String() string {
+	return fmt.Sprintf("%s/%s: %s", v.Department, v.Position, v.Name)
+}
 
 type ServicesResponse struct {
 	GeneratedIn string `json:"generated_in"`

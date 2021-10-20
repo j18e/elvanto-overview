@@ -7,13 +7,25 @@ import (
 	"io/ioutil"
 	"net/http"
 	urlpkg "net/url"
-	"os"
 	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/j18e/elvanto-overview/pkg/models"
+	"github.com/j18e/elvanto-overview/pkg/repositories"
+	"github.com/kelseyhightower/envconfig"
 	log "github.com/sirupsen/logrus"
 )
+
+const cookieTokenID = "token_id"
+
+type Config struct {
+	ClientID     string `required:"true" envconfig:"CLIENT_ID"`
+	ClientSecret string `required:"true" envconfig:"CLIENT_SECRET"`
+	RedirectURI  string `required:"true" envconfig:"REDIRECT_URI"`
+	Domain       string `required:"true" envconfig:"DOMAIN"`
+	DataFile     string `required:"true" envconfig:"DATA_FILE"`
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -22,36 +34,30 @@ func main() {
 }
 
 func run() error {
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	redirectURI := os.Getenv("REDIRECT_URI")
-	dataFile := os.Getenv("DATA_FILE")
+	var conf Config
+	if err := envconfig.Process("", &conf); err != nil {
+		return err
+	}
 
-	if clientID == "" {
-		return errors.New("required env var CLIENT_ID")
-	}
-	if clientSecret == "" {
-		return errors.New("required env var CLIENT_SECRET")
-	}
-	if redirectURI == "" {
-		return errors.New("required env var REDIRECT_URI")
-	}
-	if dataFile == "" {
-		return errors.New("required env var DATA_FILE")
+	repo, err := repositories.NewRepository(conf.DataFile)
+	if err != nil {
+		return err
 	}
 
 	srv := &Server{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		RedirectURI:  redirectURI,
+		ClientID:     conf.ClientID,
+		ClientSecret: conf.ClientSecret,
+		RedirectURI:  conf.RedirectURI,
+		Domain:       conf.Domain,
 		httpCli:      &http.Client{Timeout: time.Second * 10},
+		Repository:   repo,
 	}
 
 	r := gin.Default()
 	r.LoadHTMLGlob("template.html")
+	r.GET("/", srv.handleOverview)
 	r.GET("/login", srv.login)
 	r.GET("/login/complete", srv.completeLogin)
-	r.GET("/", srv.overview)
 	listenAddr := ":3000"
 	log.Infof("listening on %s", listenAddr)
 	return r.Run(listenAddr)
@@ -61,12 +67,31 @@ type Server struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURI  string
+	Domain       string
 	httpCli      *http.Client
+	Repository   *repositories.Repository
 }
 
-func (s *Server) overview(c *gin.Context) {
-	tok := ""
-	services, err := s.loadServices(tok)
+func (s *Server) handleOverview(c *gin.Context) {
+	tokenID, err := c.Cookie(cookieTokenID)
+	if err == http.ErrNoCookie {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+	tok, err := s.Repository.Get(tokenID)
+	if err == repositories.ErrNotFound {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+	services, err := s.loadServices(tok.Access)
 	if err != nil {
 		c.AbortWithError(500, err)
 	}
@@ -108,15 +133,20 @@ func (s *Server) completeLogin(c *gin.Context) {
 		return
 	}
 
-	bs, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		c.AbortWithError(500, fmt.Errorf("reading body: %w", err))
+	var tok repositories.Tokens
+	if err := json.NewDecoder(res.Body).Decode(&tok); err != nil {
+		c.AbortWithError(500, fmt.Errorf("decoding json: %w", err))
 		return
 	}
-	c.String(200, string(bs))
+	if err := s.Repository.Store(data.Code, tok); err != nil {
+		c.AbortWithError(500, errors.New("empty refresh token"))
+		return
+	}
+	c.SetCookie(cookieTokenID, data.Code, 0, "", s.Domain, true, true)
+	c.Redirect(http.StatusFound, "/")
 }
 
-func (s *Server) loadServices(token string) ([]ServiceType, error) {
+func (s *Server) loadServices(token string) ([]models.ServiceType, error) {
 	url := "https://api.elvanto.com/v1/services/getAll.json?page=1&page_size=100&status=published&fields[0]=volunteers"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -139,13 +169,13 @@ func (s *Server) loadServices(token string) ([]ServiceType, error) {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	var data ServicesResponse
+	var data models.ServicesResponse
 	if err := json.Unmarshal(bs, &data); err != nil {
 		return nil, fmt.Errorf("unmarshaling json: %w", err)
 	}
-	services := make(map[string][]Service)
+	services := make(map[string][]models.Service)
 	for _, svc := range data.Services.Service {
-		service := Service{
+		service := models.Service{
 			Name:       svc.Name,
 			Location:   svc.Location.Name,
 			Date:       svc.Date,
@@ -153,9 +183,9 @@ func (s *Server) loadServices(token string) ([]ServiceType, error) {
 		}
 		services[svc.Type.Name] = append(services[svc.Type.Name], service)
 	}
-	var serviceTypes []ServiceType
+	var serviceTypes []models.ServiceType
 	for t, sx := range services {
-		serviceTypes = append(serviceTypes, ServiceType{
+		serviceTypes = append(serviceTypes, models.ServiceType{
 			Type:     t,
 			Services: sx,
 		})
@@ -166,34 +196,4 @@ func (s *Server) loadServices(token string) ([]ServiceType, error) {
 	})
 
 	return serviceTypes, nil
-}
-
-type ServiceType struct {
-	Type     string
-	Services []Service
-}
-
-type Service struct {
-	Name       string
-	Location   string
-	Date       string
-	Volunteers []Volunteer
-}
-
-func (s Service) String() string {
-	res := fmt.Sprintf("%s: %s at %s:", s.Date, s.Name, s.Location)
-	for _, v := range s.Volunteers {
-		res += "\n\t" + v.String()
-	}
-	return res
-}
-
-type Volunteer struct {
-	Name       string
-	Department string
-	Position   string
-}
-
-func (v Volunteer) String() string {
-	return fmt.Sprintf("%s/%s: %s", v.Department, v.Position, v.Name)
 }
