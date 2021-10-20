@@ -1,0 +1,71 @@
+{
+  "generated_in": "0.07",
+  "status": "ok",
+  "services": {
+    "on_this_page": 1,
+    "page": "1",
+    "per_page": "10",
+    "total": 1,
+    "service": [
+      {
+        "id": "98fj329f82u2",
+        "status": 1,
+        "date_added": "2021-09-22 12:09:51",
+        "date_modified": "",
+        "description": "<p><strong>A prayer meeting</strong></p>",
+        "name": "Prayer and worship",
+        "date": "2021-10-26 17:30:00",
+        "service_type": {
+          "id": "6b921205-a09f-43a3-b0f8-ffaeaa740b03",
+          "name": "Prayer and worship"
+        },
+        "location": {
+          "id": "9f8vj2wf3p3298p",
+          "name": "Cafe"
+        },
+        "volunteers": {
+          "plan": [
+            {
+              "time_id": "f9823jf98w",
+              "positions": {
+                "position": [
+                  {
+                    "department_name": "Worship and production",
+                    "sub_department_name": "Vocals",
+                    "position_name": "Worship Leader",
+                    "volunteers": {
+                      "volunteer": [
+                        {
+                          "person": {
+                            "id": "98r23jff9823",
+                            "firstname": "Julia",
+                            "preferred_name": "",
+                            "middle_name": "",
+                            "lastname": "Wiens"
+                          },
+                          "status": "Confirmed"
+                        }
+                      ]
+                    },
+                    "department_id": "9f2833298jf",
+                    "sub_department_id": "f98238fjo38oj",
+                    "position_id": "fj982jfo8j3o8"
+                  },
+                  {
+                    "department_name": "Worship and production",
+                    "sub_department_name": "Vocals",
+                    "position_name": "Backup",
+                    "volunteers": "",
+                    "department_id": "vj2ghg43o8jfwfw",
+                    "sub_department_id": "jfo8392jo82j28",
+                    "position_id": "vjo8owjf98fjn"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
