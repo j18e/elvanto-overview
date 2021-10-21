@@ -3,7 +3,7 @@
 A simple web server to provide an overview of volunteers working in upcoming
 services who have been scheduled using Elvanto.
 
-!(preview.png)
+![preview](preview.png)
 
 ## Setting up
 You'll need access to a superuser account on Elvanto. Register an application as
