@@ -3,6 +3,8 @@
 A simple web server to provide an overview of volunteers working in upcoming
 services who have been scheduled using Elvanto.
 
+!(preview.png)
+
 ## Setting up
 You'll need access to a superuser account on Elvanto. Register an application as
 detailed [https://www.elvanto.com/api/getting-started/#oauth](here), taking note
