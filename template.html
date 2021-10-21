@@ -1,3 +1,4 @@
+{{- $elvantoDomain := .ElvantoDomain }}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,10 +9,10 @@
 <body>
 <div class="container">
 
-  <h1 class="py-3">Service overview</h1>
+  <h1 class="py-3">Services Overview</h1>
 
   <div class="accordion" id="svcAccordion">
-    {{- range $i, $type := . }}
+    {{- range $i, $type := .Services }}
     <div class="accordion-item">
       <h2 class="accordion-header" id="svcTypeHeading{{$i}}">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#svcTypeCollapse{{$i}}">
@@ -22,18 +23,29 @@
         <div class="accordion-body container">
           {{- range $type.Services }}
           <div class="row py-3">
-            <strong><ol class="breadcrumb">
-              <li class="breadcrumb-item">{{ .Date }}</li>
-              <li class="breadcrumb-item">{{ .Location }}</li>
-            </ol></strong>
-            {{- range .Volunteers }}
-            <ol class="breadcrumb">
-              <li class="breadcrumb-item">{{ .Department }}</li>
-              <li class="breadcrumb-item">{{ .Position }}</li>
-              <li class="breadcrumb-item">{{ .Name }}</li>
-            </ol>
-            {{- end }}
+            <div class="col">
+              <strong><ol class="breadcrumb">
+                <li class="breadcrumb-item">{{ .Date }}</li>
+                <li class="breadcrumb-item">{{ .Location }}</li>
+              </ol></strong>
+            </div>
+            <div class="col">
+              <a href="https://{{ $elvantoDomain }}/admin/services/service_volunteers/?id={{ .ID }}" target="_blank" class="btn btn-primary">
+                View Service
+              </a>
+            </div>
           </div>
+            {{- range .Volunteers }}
+          <div class="row">
+            <div class="col">
+              <ol class="breadcrumb">
+                <li class="breadcrumb-item">{{ .Department }}</li>
+                <li class="breadcrumb-item">{{ .Position }}</li>
+                <li class="breadcrumb-item">{{ .Name }}</li>
+              </ol>
+            </div>
+          </div>
+            {{- end }}
           {{- end }}
         </div>
       </div>

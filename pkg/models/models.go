@@ -3,7 +3,40 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"sort"
 )
+
+func RenderServices(r io.Reader) ([]ServiceType, error) {
+	var data ServicesResponse
+	if err := json.NewDecoder(r).Decode(&data); err != nil {
+		return nil, fmt.Errorf("unmarshaling json: %w", err)
+	}
+	services := make(map[string][]Service)
+	for _, svc := range data.Services.Service {
+		service := Service{
+			Name:       svc.Name,
+			ID:         svc.ID,
+			Location:   svc.Location.Name,
+			Date:       svc.Date,
+			Volunteers: svc.Volunteers,
+		}
+		services[svc.Type.Name] = append(services[svc.Type.Name], service)
+	}
+	var serviceTypes []ServiceType
+	for t, sx := range services {
+		serviceTypes = append(serviceTypes, ServiceType{
+			Type:     t,
+			Services: sx,
+		})
+	}
+
+	sort.Slice(serviceTypes, func(i, j int) bool {
+		return serviceTypes[i].Type < serviceTypes[j].Type
+	})
+
+	return serviceTypes, nil
+}
 
 type ServiceType struct {
 	Type     string
@@ -12,6 +45,7 @@ type ServiceType struct {
 
 type Service struct {
 	Name       string
+	ID         string
 	Location   string
 	Date       string
 	Volunteers []Volunteer
@@ -42,6 +76,7 @@ type ServicesResponse struct {
 		// Page       string `json:"page"`
 		// PerPage    string `json:"per_page"`
 		Service []struct {
+			ID           string `json:"id"`
 			Date         string `json:"date"`
 			DateAdded    string `json:"date_added"`
 			DateModified string `json:"date_modified"`

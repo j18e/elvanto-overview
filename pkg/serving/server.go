@@ -3,10 +3,9 @@ package serving
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	urlpkg "net/url"
-	"sort"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,12 +17,40 @@ import (
 const cookieTokenID = "token_id"
 
 type Server struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURI  string
-	Domain       string
-	HTTPCli      *http.Client
-	Repository   *repositories.Repository
+	ClientID      string
+	ClientSecret  string
+	RedirectURI   string
+	Domain        string
+	ElvantoDomain string
+	HTTPCli       *http.Client
+	Repository    *repositories.Repository
+}
+
+type overviewData struct {
+	Services      []models.ServiceType
+	ElvantoDomain string
+}
+
+func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		f, err := os.Open(dataFile)
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+		defer f.Close()
+
+		svcTypes, err := models.RenderServices(f)
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+		data := overviewData{
+			Services:      svcTypes,
+			ElvantoDomain: elvantoDomain,
+		}
+		c.HTML(200, "template.html", data)
+	}
 }
 
 func (s *Server) HandleOverview(c *gin.Context) {
@@ -33,7 +60,11 @@ func (s *Server) HandleOverview(c *gin.Context) {
 		c.AbortWithError(500, err)
 		return
 	}
-	c.HTML(200, "template.html", services)
+	data := overviewData{
+		Services:      services,
+		ElvantoDomain: s.ElvantoDomain,
+	}
+	c.HTML(200, "template.html", data)
 }
 
 func (s *Server) HandleLogin(c *gin.Context) {
@@ -102,36 +133,10 @@ func (s *Server) loadServices(token string) ([]models.ServiceType, error) {
 	if res.StatusCode > 399 {
 		return nil, fmt.Errorf("making request: got status %d", res.StatusCode)
 	}
-	bs, err := ioutil.ReadAll(res.Body)
+
+	serviceTypes, err := models.RenderServices(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
+		return nil, err
 	}
-
-	var data models.ServicesResponse
-	if err := json.Unmarshal(bs, &data); err != nil {
-		return nil, fmt.Errorf("unmarshaling json: %w", err)
-	}
-	services := make(map[string][]models.Service)
-	for _, svc := range data.Services.Service {
-		service := models.Service{
-			Name:       svc.Name,
-			Location:   svc.Location.Name,
-			Date:       svc.Date,
-			Volunteers: svc.Volunteers,
-		}
-		services[svc.Type.Name] = append(services[svc.Type.Name], service)
-	}
-	var serviceTypes []models.ServiceType
-	for t, sx := range services {
-		serviceTypes = append(serviceTypes, models.ServiceType{
-			Type:     t,
-			Services: sx,
-		})
-	}
-
-	sort.Slice(serviceTypes, func(i, j int) bool {
-		return serviceTypes[i].Type < serviceTypes[j].Type
-	})
-
 	return serviceTypes, nil
 }
