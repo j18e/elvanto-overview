@@ -25,6 +25,8 @@ Additional required environment variables:
 - DATA_FILE is the path to the file you want the bolt database to be stored in.
   This database contains all user token pairs so the app can remember returning
   users and use their tokens for fetching data from Elvanto.
+- ELVANTO_DOMAIN is the domain you access your Elvanto site on, eg
+  gracefellowship.elvanto.eu.
 
 Once it's running you should be able to use it by visiting the external URL
 you've set up eg https://my-site.com/.
