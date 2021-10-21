@@ -5,10 +5,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/j18e/elvanto-overview/pkg/repositories"
-	"github.com/j18e/elvanto-overview/pkg/serving"
 	"github.com/kelseyhightower/envconfig"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/j18e/elvanto-overview/pkg/middleware"
+	"github.com/j18e/elvanto-overview/pkg/repositories"
+	"github.com/j18e/elvanto-overview/pkg/serving"
 )
 
 type Config struct {
@@ -47,7 +49,11 @@ func run() error {
 
 	r := gin.Default()
 	r.LoadHTMLGlob("template.html")
-	r.GET("/", srv.HandleOverview)
+	r.GET("/", middleware.SetTokens(repo),
+		middleware.RequireTokens(),
+		middleware.RefreshTokens(srv.HTTPCli, repo),
+		srv.HandleOverview,
+	)
 	r.GET("/login", srv.HandleLogin)
 	r.GET("/login/complete", srv.HandleCompleteLogin)
 	listenAddr := ":3000"

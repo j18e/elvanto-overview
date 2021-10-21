@@ -2,7 +2,6 @@ package serving
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,6 +9,8 @@ import (
 	"sort"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/j18e/elvanto-overview/pkg/middleware"
 	"github.com/j18e/elvanto-overview/pkg/models"
 	"github.com/j18e/elvanto-overview/pkg/repositories"
 )
@@ -26,27 +27,11 @@ type Server struct {
 }
 
 func (s *Server) HandleOverview(c *gin.Context) {
-	tokenID, err := c.Cookie(cookieTokenID)
-	if err == http.ErrNoCookie {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-	if err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-	tok, err := s.Repository.Get(tokenID)
-	if err == repositories.ErrNotFound {
-		c.Redirect(http.StatusFound, "/login")
-		return
-	}
-	if err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
+	tok := middleware.GetTokens(c)
 	services, err := s.loadServices(tok.Access)
 	if err != nil {
 		c.AbortWithError(500, err)
+		return
 	}
 	c.HTML(200, "template.html", services)
 }
@@ -92,7 +77,7 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 		return
 	}
 	if err := s.Repository.Store(data.Code, tok); err != nil {
-		c.AbortWithError(500, errors.New("empty refresh token"))
+		c.AbortWithError(500, fmt.Errorf("storing token: %w", err))
 		return
 	}
 	c.SetCookie(cookieTokenID, data.Code, 0, "", s.Domain, true, true)
