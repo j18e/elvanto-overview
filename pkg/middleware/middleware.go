@@ -3,6 +3,7 @@ package middleware
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	urlpkg "net/url"
 
@@ -15,10 +16,12 @@ import (
 
 const keyTokens = "user_tokens"
 
+var errNoTokens = errors.New("tokens not found")
+
 func GetTokens(sm *scs.SessionManager, c *gin.Context) (*models.Tokens, error) {
 	bs := sm.GetBytes(c.Request.Context(), keyTokens)
 	if bs == nil {
-		return nil, errors.New("no tokens found")
+		return nil, errNoTokens
 	}
 	var tok models.Tokens
 	if err := json.Unmarshal(bs, &tok); err != nil {
@@ -38,11 +41,16 @@ func StoreTokens(sm *scs.SessionManager, c *gin.Context, tok models.Tokens) erro
 
 func RequireTokens(sm *scs.SessionManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tok, _ := GetTokens(sm, c)
-		if tok == nil {
+		_, err := GetTokens(sm, c)
+		switch err {
+		case nil:
+			c.Next()
+		case errNoTokens:
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
-			return
+		default:
+			c.AbortWithError(500, err)
+			fmt.Fprint(c.Writer, "an unexpected error occurred")
 		}
 	}
 }
