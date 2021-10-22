@@ -7,23 +7,24 @@ import (
 	urlpkg "net/url"
 	"os"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/j18e/elvanto-overview/pkg/middleware"
 	"github.com/j18e/elvanto-overview/pkg/models"
-	"github.com/j18e/elvanto-overview/pkg/repositories"
 )
 
-const cookieTokenID = "token_id"
+const keyTokens = "user_tokens"
 
 type Server struct {
-	ClientID      string
-	ClientSecret  string
-	RedirectURI   string
-	Domain        string
-	ElvantoDomain string
-	HTTPCli       *http.Client
-	Repository    *repositories.Repository
+	ClientID       string
+	ClientSecret   string
+	RedirectURI    string
+	Domain         string
+	ElvantoDomain  string
+	HTTPCli        *http.Client
+	SessionManager *scs.SessionManager
 }
 
 type overviewData struct {
@@ -54,7 +55,8 @@ func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
 }
 
 func (s *Server) HandleOverview(c *gin.Context) {
-	tok := middleware.GetTokens(c)
+	log.Debug("getting overview")
+	tok, _ := middleware.GetTokens(s.SessionManager, c)
 	services, err := s.loadServices(tok.Access)
 	if err != nil {
 		c.AbortWithError(500, err)
@@ -65,6 +67,7 @@ func (s *Server) HandleOverview(c *gin.Context) {
 		ElvantoDomain: s.ElvantoDomain,
 	}
 	c.HTML(200, "template.html", data)
+	log.Debug("finished getting overview")
 }
 
 func (s *Server) HandleLogin(c *gin.Context) {
@@ -102,16 +105,15 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 		return
 	}
 
-	var tok repositories.Tokens
+	var tok models.Tokens
 	if err := json.NewDecoder(res.Body).Decode(&tok); err != nil {
 		c.AbortWithError(500, fmt.Errorf("decoding json: %w", err))
 		return
 	}
-	if err := s.Repository.Store(data.Code, tok); err != nil {
+	if err := middleware.StoreTokens(s.SessionManager, c, tok); err != nil {
 		c.AbortWithError(500, fmt.Errorf("storing token: %w", err))
 		return
 	}
-	c.SetCookie(cookieTokenID, data.Code, 0, "", s.Domain, true, true)
 	c.Redirect(http.StatusFound, "/")
 }
 

@@ -20,8 +20,6 @@ integration:
 - REDIRECT_URI
 
 Additional required environment variables:
-- DOMAIN for the cookie domain (the same domain as in the redirect URI) eg
-  my-site.com
 - DATA_FILE is the path to the file you want the bolt database to be stored in.
   This database contains all user token pairs so the app can remember returning
   users and use their tokens for fetching data from Elvanto.

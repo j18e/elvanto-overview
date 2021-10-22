@@ -2,23 +2,43 @@ package middleware
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	urlpkg "net/url"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/j18e/elvanto-overview/pkg/repositories"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/j18e/elvanto-overview/pkg/models"
 )
 
-const (
-	cookieTokenID = "token_id"
-	keyTokens     = "user_tokens"
-	keyCode       = "user_tokens_code"
-)
+const keyTokens = "user_tokens"
 
-func RequireTokens() gin.HandlerFunc {
+func GetTokens(sm *scs.SessionManager, c *gin.Context) (*models.Tokens, error) {
+	bs := sm.GetBytes(c.Request.Context(), keyTokens)
+	if bs == nil {
+		return nil, errors.New("no tokens found")
+	}
+	var tok models.Tokens
+	if err := json.Unmarshal(bs, &tok); err != nil {
+		return nil, err
+	}
+	return &tok, nil
+}
+
+func StoreTokens(sm *scs.SessionManager, c *gin.Context, tok models.Tokens) error {
+	bs, err := json.Marshal(&tok)
+	if err != nil {
+		return err
+	}
+	sm.Put(c.Request.Context(), keyTokens, bs)
+	return nil
+}
+
+func RequireTokens(sm *scs.SessionManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tok := GetTokens(c)
+		tok, _ := GetTokens(sm, c)
 		if tok == nil {
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
@@ -27,59 +47,13 @@ func RequireTokens() gin.HandlerFunc {
 	}
 }
 
-func SetTokens(repo *repositories.Repository) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		code, err := c.Cookie(cookieTokenID)
-		if err != nil {
-			return
-		}
-		if code == "" {
-			return
-		}
-		tokens, err := repo.Get(code)
-		if err != nil {
-			return
-		}
-		c.Set(keyTokens, *tokens)
-		c.Set(keyCode, code)
-	}
-}
-
-func GetTokens(c *gin.Context) *repositories.Tokens {
-	t, ok := c.Get(keyTokens)
-	if !ok {
-		return nil
-	}
-	tok, ok := t.(repositories.Tokens)
-	if !ok {
-		return nil
-	}
-	return &tok
-}
-
-func getCode(c *gin.Context) string {
-	code, ok := c.Get(keyCode)
-	if !ok {
-		return ""
-	}
-	str, ok := code.(string)
-	if !ok {
-		return ""
-	}
-	return str
-}
-
-func RefreshTokens(cli *http.Client, repo *repositories.Repository) gin.HandlerFunc {
+func RefreshTokens(cli *http.Client, sm *scs.SessionManager) gin.HandlerFunc {
 	const url = "https://api.elvanto.com/oauth/token"
 
 	return func(c *gin.Context) {
 		c.Next()
-		log.Info("refreshing tokens")
-		oldTok := GetTokens(c)
-		code := getCode(c)
-		if code == "" {
-			return
-		}
+		log.Debug("refreshing tokens")
+		oldTok, _ := GetTokens(sm, c)
 
 		vals := make(urlpkg.Values)
 		vals.Set("grant_type", "refresh_token")
@@ -97,16 +71,16 @@ func RefreshTokens(cli *http.Client, repo *repositories.Repository) gin.HandlerF
 			return
 		}
 
-		var newTok repositories.Tokens
+		var newTok models.Tokens
 		if err := json.NewDecoder(res.Body).Decode(&newTok); err != nil {
 			log.Errorf("refreshing tokens: decoding response: %s", err)
 			return
 		}
-		if err := repo.Store(code, newTok); err != nil {
+		if err := StoreTokens(sm, c, newTok); err != nil {
 			log.Errorf("refreshing tokens: storing new tokens: %s", err)
 			return
 		}
 		c.Set(keyTokens, newTok)
-		log.Info("finished refreshing tokens")
+		log.Debug("finished refreshing tokens")
 	}
 }

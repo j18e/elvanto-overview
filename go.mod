@@ -3,6 +3,8 @@ module github.com/j18e/elvanto-overview
 go 1.17
 
 require (
+	github.com/alexedwards/scs/boltstore v0.0.0-20210904201103-9ffa4cfa9323
+	github.com/alexedwards/scs/v2 v2.4.0
 	github.com/gin-gonic/gin v1.7.4
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/sirupsen/logrus v1.8.1

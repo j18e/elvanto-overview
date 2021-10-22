@@ -7,6 +7,11 @@ import (
 	"sort"
 )
 
+type Tokens struct {
+	Access  string `json:"access_token"`
+	Refresh string `json:"refresh_token"`
+}
+
 func RenderServices(r io.Reader) ([]ServiceType, error) {
 	var data ServicesResponse
 	if err := json.NewDecoder(r).Decode(&data); err != nil {

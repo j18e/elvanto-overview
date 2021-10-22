@@ -6,12 +6,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/alexedwards/scs/boltstore"
+	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/kelseyhightower/envconfig"
 	log "github.com/sirupsen/logrus"
+	"go.etcd.io/bbolt"
 
 	"github.com/j18e/elvanto-overview/pkg/middleware"
-	"github.com/j18e/elvanto-overview/pkg/repositories"
 	"github.com/j18e/elvanto-overview/pkg/serving"
 )
 
@@ -21,7 +23,6 @@ type Config struct {
 	ClientID      string `required:"true" envconfig:"CLIENT_ID"`
 	ClientSecret  string `required:"true" envconfig:"CLIENT_SECRET"`
 	RedirectURI   string `required:"true" envconfig:"REDIRECT_URI"`
-	Domain        string `required:"true" envconfig:"DOMAIN"`
 	DataFile      string `required:"true" envconfig:"DATA_FILE"`
 	ElvantoDomain string `required:"true" envconfig:"ELVANTO_DOMAIN"`
 }
@@ -52,31 +53,35 @@ func run() error {
 		return err
 	}
 
-	repo, err := repositories.NewRepository(conf.DataFile)
+	db, err := bbolt.Open(conf.DataFile, 0600, nil)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
+
+	sm := scs.New()
+	sm.Store = boltstore.NewWithCleanupInterval(db, time.Hour)
+	sm.Lifetime = time.Hour * 24 * 30
 
 	srv := &serving.Server{
-		ClientID:      conf.ClientID,
-		ClientSecret:  conf.ClientSecret,
-		RedirectURI:   conf.RedirectURI,
-		Domain:        conf.Domain,
-		ElvantoDomain: conf.ElvantoDomain,
-		HTTPCli:       &http.Client{Timeout: time.Second * 10},
-		Repository:    repo,
+		ClientID:       conf.ClientID,
+		ClientSecret:   conf.ClientSecret,
+		RedirectURI:    conf.RedirectURI,
+		ElvantoDomain:  conf.ElvantoDomain,
+		HTTPCli:        &http.Client{Timeout: time.Second * 10},
+		SessionManager: sm,
 	}
 
 	r := gin.Default()
 	r.LoadHTMLGlob("template.html")
 
-	r.GET("/", middleware.SetTokens(repo),
-		middleware.RequireTokens(),
-		middleware.RefreshTokens(srv.HTTPCli, repo),
+	r.GET("/",
+		middleware.RequireTokens(sm),
+		middleware.RefreshTokens(srv.HTTPCli, sm),
 		srv.HandleOverview,
 	)
 	r.GET("/login", srv.HandleLogin)
 	r.GET("/login/complete", srv.HandleCompleteLogin)
 	log.Infof("listening on %s", listenAddr)
-	return r.Run(listenAddr)
+	return http.ListenAndServe(listenAddr, sm.LoadAndSave(r))
 }
