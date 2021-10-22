@@ -7,7 +7,6 @@ import (
 	urlpkg "net/url"
 	"os"
 
-	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
@@ -18,13 +17,13 @@ import (
 const keyTokens = "user_tokens"
 
 type Server struct {
-	ClientID       string
-	ClientSecret   string
-	RedirectURI    string
-	Domain         string
-	ElvantoDomain  string
-	HTTPCli        *http.Client
-	SessionManager *scs.SessionManager
+	ClientID      string
+	ClientSecret  string
+	RedirectURI   string
+	Domain        string
+	ElvantoDomain string
+	HTTPCli       *http.Client
+	MW            middleware.MW
 }
 
 type overviewData struct {
@@ -56,7 +55,7 @@ func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
 
 func (s *Server) HandleOverview(c *gin.Context) {
 	log.Debug("getting overview")
-	tok, _ := middleware.GetTokens(s.SessionManager, c)
+	tok, _ := s.MW.GetTokens(c)
 	services, err := s.loadServices(tok.Access)
 	if err != nil {
 		c.AbortWithError(500, err)
@@ -110,7 +109,7 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 		c.AbortWithError(500, fmt.Errorf("decoding json: %w", err))
 		return
 	}
-	if err := middleware.StoreTokens(s.SessionManager, c, tok); err != nil {
+	if err := s.MW.StoreTokens(c, tok); err != nil {
 		c.AbortWithError(500, fmt.Errorf("storing token: %w", err))
 		return
 	}

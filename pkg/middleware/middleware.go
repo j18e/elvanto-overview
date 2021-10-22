@@ -18,8 +18,13 @@ const keyTokens = "user_tokens"
 
 var errNoTokens = errors.New("tokens not found")
 
-func GetTokens(sm *scs.SessionManager, c *gin.Context) (*models.Tokens, error) {
-	bs := sm.GetBytes(c.Request.Context(), keyTokens)
+type MW struct {
+	HTTPCli *http.Client
+	SM      *scs.SessionManager
+}
+
+func (mw *MW) GetTokens(c *gin.Context) (*models.Tokens, error) {
+	bs := mw.SM.GetBytes(c.Request.Context(), keyTokens)
 	if bs == nil {
 		return nil, errNoTokens
 	}
@@ -30,65 +35,60 @@ func GetTokens(sm *scs.SessionManager, c *gin.Context) (*models.Tokens, error) {
 	return &tok, nil
 }
 
-func StoreTokens(sm *scs.SessionManager, c *gin.Context, tok models.Tokens) error {
+func (mw *MW) StoreTokens(c *gin.Context, tok models.Tokens) error {
 	bs, err := json.Marshal(&tok)
 	if err != nil {
 		return err
 	}
-	sm.Put(c.Request.Context(), keyTokens, bs)
+	mw.SM.Put(c.Request.Context(), keyTokens, bs)
 	return nil
 }
 
-func RequireTokens(sm *scs.SessionManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		_, err := GetTokens(sm, c)
-		switch err {
-		case nil:
-			c.Next()
-		case errNoTokens:
-			c.Redirect(http.StatusFound, "/login")
-			c.Abort()
-		default:
-			c.AbortWithError(500, err)
-			fmt.Fprint(c.Writer, "an unexpected error occurred")
-		}
+func (mw *MW) RequireTokens(c *gin.Context) {
+	_, err := mw.GetTokens(c)
+	switch err {
+	case nil:
+		go mw.refreshTokens(c.Copy())
+		c.Next()
+	case errNoTokens:
+		c.Redirect(http.StatusFound, "/login")
+		c.Abort()
+	default:
+		c.AbortWithError(500, err)
+		fmt.Fprint(c.Writer, "an unexpected error occurred")
 	}
 }
 
-func RefreshTokens(cli *http.Client, sm *scs.SessionManager) gin.HandlerFunc {
+func (mw *MW) refreshTokens(c *gin.Context) {
 	const url = "https://api.elvanto.com/oauth/token"
 
-	return func(c *gin.Context) {
-		c.Next()
-		log.Debug("refreshing tokens")
-		oldTok, _ := GetTokens(sm, c)
+	log.Debug("refreshing tokens")
+	oldTok, _ := mw.GetTokens(c)
 
-		vals := make(urlpkg.Values)
-		vals.Set("grant_type", "refresh_token")
-		vals.Set("refresh_token", oldTok.Refresh)
+	vals := make(urlpkg.Values)
+	vals.Set("grant_type", "refresh_token")
+	vals.Set("refresh_token", oldTok.Refresh)
 
-		res, err := cli.PostForm(url, vals)
-		if err != nil {
-			log.Errorf("refreshing tokens: posting request: %s", err)
-			return
-		}
-		defer res.Body.Close()
-
-		if res.StatusCode > 399 {
-			log.Errorf("refreshing tokens: got status %s", res.Status)
-			return
-		}
-
-		var newTok models.Tokens
-		if err := json.NewDecoder(res.Body).Decode(&newTok); err != nil {
-			log.Errorf("refreshing tokens: decoding response: %s", err)
-			return
-		}
-		if err := StoreTokens(sm, c, newTok); err != nil {
-			log.Errorf("refreshing tokens: storing new tokens: %s", err)
-			return
-		}
-		c.Set(keyTokens, newTok)
-		log.Debug("finished refreshing tokens")
+	res, err := mw.HTTPCli.PostForm(url, vals)
+	if err != nil {
+		log.Errorf("refreshing tokens: posting request: %s", err)
+		return
 	}
+	defer res.Body.Close()
+
+	if res.StatusCode > 399 {
+		log.Errorf("refreshing tokens: got status %s", res.Status)
+		return
+	}
+
+	var newTok models.Tokens
+	if err := json.NewDecoder(res.Body).Decode(&newTok); err != nil {
+		log.Errorf("refreshing tokens: decoding response: %s", err)
+		return
+	}
+	if err := mw.StoreTokens(c, newTok); err != nil {
+		log.Errorf("refreshing tokens: storing new tokens: %s", err)
+		return
+	}
+	log.Debug("finished refreshing tokens")
 }

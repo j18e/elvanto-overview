@@ -10,6 +10,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
 
@@ -35,7 +36,14 @@ func main() {
 
 func run() error {
 	dryRun := flag.Bool("dry-run", false, "just load example data and skip authentication")
+	logLevel := flag.String("log-level", "info", "level to log on")
 	flag.Parse()
+
+	lvl, err := logrus.ParseLevel(*logLevel)
+	if err != nil {
+		return err
+	}
+	logrus.SetLevel(lvl)
 
 	if *dryRun {
 		return runDry()
@@ -56,23 +64,22 @@ func run() error {
 	sm.Store = boltstore.NewWithCleanupInterval(db, time.Hour)
 	sm.Lifetime = time.Hour * 24 * 30
 
+	httpCli := &http.Client{Timeout: time.Second * 10}
+	mw := middleware.MW{HTTPCli: httpCli, SM: sm}
+
 	srv := &serving.Server{
-		ClientID:       conf.ClientID,
-		ClientSecret:   conf.ClientSecret,
-		RedirectURI:    conf.RedirectURI,
-		ElvantoDomain:  conf.ElvantoDomain,
-		HTTPCli:        &http.Client{Timeout: time.Second * 10},
-		SessionManager: sm,
+		ClientID:      conf.ClientID,
+		ClientSecret:  conf.ClientSecret,
+		RedirectURI:   conf.RedirectURI,
+		ElvantoDomain: conf.ElvantoDomain,
+		HTTPCli:       httpCli,
+		MW:            mw,
 	}
 
 	r := gin.Default()
 	r.LoadHTMLGlob("template.html")
 
-	r.GET("/",
-		middleware.RequireTokens(sm),
-		middleware.RefreshTokens(srv.HTTPCli, sm),
-		srv.HandleOverview,
-	)
+	r.GET("/", mw.RequireTokens, srv.HandleOverview)
 	r.GET("/login", srv.HandleLogin)
 	r.GET("/login/complete", srv.HandleCompleteLogin)
 	log.Infof("listening on %s", listenAddr)
