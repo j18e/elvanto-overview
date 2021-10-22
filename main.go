@@ -38,14 +38,7 @@ func run() error {
 	flag.Parse()
 
 	if *dryRun {
-		elvantoDomain := os.Getenv("ELVANTO_DOMAIN")
-		if elvantoDomain == "" {
-			log.Warn("elvanto domain not set")
-		}
-		r := gin.Default()
-		r.LoadHTMLGlob("template.html")
-		r.GET("/", serving.DryRunHandler("example-data.json", elvantoDomain))
-		return r.Run(listenAddr)
+		return runDry()
 	}
 
 	var conf Config
@@ -84,4 +77,15 @@ func run() error {
 	r.GET("/login/complete", srv.HandleCompleteLogin)
 	log.Infof("listening on %s", listenAddr)
 	return http.ListenAndServe(listenAddr, sm.LoadAndSave(r))
+}
+
+func runDry() error {
+	elvantoDomain := os.Getenv("ELVANTO_DOMAIN")
+	if elvantoDomain == "" {
+		log.Warn("elvanto domain not set")
+	}
+	r := gin.Default()
+	r.LoadHTMLGlob("template.html")
+	r.GET("/", serving.DryRunHandler("example-data.json", elvantoDomain))
+	return r.Run(listenAddr)
 }
