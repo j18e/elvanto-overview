@@ -104,7 +104,7 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 		return
 	}
 
-	var tok models.Tokens
+	var tok models.TokenPair
 	if err := json.NewDecoder(res.Body).Decode(&tok); err != nil {
 		c.AbortWithError(500, fmt.Errorf("decoding json: %w", err))
 		return

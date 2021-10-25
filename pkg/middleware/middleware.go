@@ -23,19 +23,19 @@ type MW struct {
 	SM      *scs.SessionManager
 }
 
-func (mw *MW) GetTokens(c *gin.Context) (*models.Tokens, error) {
+func (mw *MW) GetTokens(c *gin.Context) (*models.TokenPair, error) {
 	bs := mw.SM.GetBytes(c.Request.Context(), keyTokens)
 	if bs == nil {
 		return nil, errNoTokens
 	}
-	var tok models.Tokens
+	var tok models.TokenPair
 	if err := json.Unmarshal(bs, &tok); err != nil {
 		return nil, err
 	}
 	return &tok, nil
 }
 
-func (mw *MW) StoreTokens(c *gin.Context, tok models.Tokens) error {
+func (mw *MW) StoreTokens(c *gin.Context, tok models.TokenPair) error {
 	bs, err := json.Marshal(&tok)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func (mw *MW) refreshTokens(c *gin.Context) {
 		return
 	}
 
-	var newTok models.Tokens
+	var newTok models.TokenPair
 	if err := json.NewDecoder(res.Body).Decode(&newTok); err != nil {
 		log.Errorf("refreshing tokens: decoding response: %s", err)
 		return
