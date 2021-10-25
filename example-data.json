@@ -169,6 +169,16 @@
                             "lastname": "Wiens"
                           },
                           "status": "Confirmed"
+                        },
+                        {
+                          "person": {
+                            "id": "98r23jff9823",
+                            "firstname": "Nathaniel",
+                            "preferred_name": "",
+                            "middle_name": "",
+                            "lastname": "Wiens"
+                          },
+                          "status": "Confirmed"
                         }
                       ]
                     },
@@ -289,6 +299,16 @@
                           "person": {
                             "id": "98r23jff9823",
                             "firstname": "Julia",
+                            "preferred_name": "",
+                            "middle_name": "",
+                            "lastname": "Wiens"
+                          },
+                          "status": "Confirmed"
+                        },
+                        {
+                          "person": {
+                            "id": "98r23jff9823",
+                            "firstname": "Nathaniel",
                             "preferred_name": "",
                             "middle_name": "",
                             "lastname": "Wiens"

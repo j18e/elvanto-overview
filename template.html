@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
   <title>Elvanto Overview</title>
 </head>
@@ -23,29 +24,30 @@
         <div class="accordion-body container">
           {{- range $type.Services }}
           <div class="row py-3">
-            <div class="col">
-              <strong><ol class="breadcrumb">
-                <li class="breadcrumb-item">{{ .Date }}</li>
-                <li class="breadcrumb-item">{{ .Location }}</li>
-              </ol></strong>
+            <div class="col-12 col-sm-6">
+              <h4>
+                <ol class="breadcrumb">
+                  <li class="breadcrumb-item">{{ .Date }}</li>
+                  <li class="breadcrumb-item">{{ .Location }}</li>
+                </ol>
+              </h4>
             </div>
-            <div class="col">
+            <div class="col-12 col-sm-6">
               <a href="https://{{ $elvantoDomain }}/admin/services/service_volunteers/?id={{ .ID }}" target="_blank" class="btn btn-primary">
                 View Service
               </a>
             </div>
           </div>
-            {{- range .Volunteers }}
-          <div class="row">
-            <div class="col">
-              <ol class="breadcrumb">
-                <li class="breadcrumb-item">{{ .Department }}</li>
-                <li class="breadcrumb-item">{{ .Position }}</li>
-                <li class="breadcrumb-item">{{ .Name }}</li>
-              </ol>
-            </div>
-          </div>
+          {{- range $dept, $positions := .Volunteers }}
+          <h5 class="pt-2">{{ $dept }}</h5>
+          <ul class="list-group list-group-flush">
+            {{- range $pos, $names := $positions }}
+            {{- range $names }}
+            <li class="list-group-item">{{ $pos }}: {{ . }}</li>
             {{- end }}
+            {{- end }}
+          </ul>
+          {{- end }}
           {{- end }}
         </div>
       </div>

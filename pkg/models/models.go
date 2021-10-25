@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 type TokenPair struct {
@@ -19,12 +20,20 @@ func RenderServices(r io.Reader) ([]ServiceType, error) {
 	}
 	services := make(map[string][]Service)
 	for _, svc := range data.Services.Service {
+		date := strings.Split(svc.Date, " ")[0]
+		volunteers := make(map[string]map[string][]string)
+		for _, vol := range svc.Volunteers {
+			if volunteers[vol.Department] == nil {
+				volunteers[vol.Department] = make(map[string][]string)
+			}
+			volunteers[vol.Department][vol.Position] = append(volunteers[vol.Department][vol.Position], vol.Name)
+		}
 		service := Service{
 			Name:       svc.Name,
 			ID:         svc.ID,
 			Location:   svc.Location.Name,
-			Date:       svc.Date,
-			Volunteers: svc.Volunteers,
+			Date:       date,
+			Volunteers: volunteers,
 		}
 		services[svc.Type.Name] = append(services[svc.Type.Name], service)
 	}
@@ -53,15 +62,7 @@ type Service struct {
 	ID         string
 	Location   string
 	Date       string
-	Volunteers []Volunteer
-}
-
-func (s Service) String() string {
-	res := fmt.Sprintf("%s: %s at %s:", s.Date, s.Name, s.Location)
-	for _, v := range s.Volunteers {
-		res += "\n\t" + v.String()
-	}
-	return res
+	Volunteers map[string]map[string][]string
 }
 
 type Volunteer struct {
