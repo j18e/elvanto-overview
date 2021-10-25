@@ -15,22 +15,22 @@
   <div class="accordion" id="svcAccordion">
     {{- range $i, $type := .Services }}
     <div class="accordion-item">
-      <h2 class="accordion-header" id="svcTypeHeading{{$i}}">
+      <div class="accordion-header" id="svcTypeHeading{{$i}}">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#svcTypeCollapse{{$i}}">
           <h4>{{ $type.Type }}</h4>
         </button>
-      </h2>
+      </div>
       <div id="svcTypeCollapse{{$i}}" class="accordion-collapse collapse" data-bs-parent="#svcAccordion">
         <div class="accordion-body container">
           {{- range $type.Services }}
           <div class="row py-3">
             <div class="col-12 col-sm-6">
-              <h4>
+              <h5>
                 <ol class="breadcrumb">
                   <li class="breadcrumb-item">{{ .Date }}</li>
                   <li class="breadcrumb-item">{{ .Location }}</li>
                 </ol>
-              </h4>
+              </h5>
             </div>
             <div class="col-12 col-sm-6">
               <a href="https://{{ $elvantoDomain }}/admin/services/service_volunteers/?id={{ .ID }}" target="_blank" class="btn btn-primary">
@@ -43,7 +43,10 @@
           <ul class="list-group list-group-flush">
             {{- range $pos, $names := $positions }}
             {{- range $names }}
-            <li class="list-group-item">{{ $pos }}: {{ . }}</li>
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item">{{ $pos }}</li>
+              <li class="breadcrumb-item">{{ . }}</li>
+            </ol>
             {{- end }}
             {{- end }}
           </ul>
