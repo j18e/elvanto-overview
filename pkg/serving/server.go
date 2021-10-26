@@ -1,14 +1,15 @@
 package serving
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net/http"
-	urlpkg "net/url"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
 
 	"github.com/j18e/elvanto-overview/pkg/middleware"
 	"github.com/j18e/elvanto-overview/pkg/models"
@@ -17,12 +18,9 @@ import (
 const keyTokens = "user_tokens"
 
 type Server struct {
-	ClientID      string
-	ClientSecret  string
-	RedirectURI   string
+	Oauth2        oauth2.Config
 	Domain        string
 	ElvantoDomain string
-	HTTPCli       *http.Client
 	MW            middleware.MW
 }
 
@@ -53,10 +51,15 @@ func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
 	}
 }
 
+func (s *Server) HandleNotSignedIn(c *gin.Context) {
+	c.Status(200)
+	fmt.Fprint(c.Writer, `<html><body><a href="/login">Sign in</a></body></html>`)
+}
+
 func (s *Server) HandleOverview(c *gin.Context) {
 	log.Debug("getting overview")
 	tok, _ := s.MW.GetTokens(c)
-	services, err := s.loadServices(tok.Access)
+	services, err := s.loadServices(tok)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
@@ -69,9 +72,13 @@ func (s *Server) HandleOverview(c *gin.Context) {
 	log.Debug("finished getting overview")
 }
 
+func (s *Server) HandleLogout(c *gin.Context) {
+}
+
 func (s *Server) HandleLogin(c *gin.Context) {
-	const uri = "https://api.elvanto.com/oauth?type=web_server&client_id=%s&redirect_uri=%s&scope=%s"
-	c.Redirect(http.StatusFound, fmt.Sprintf(uri, s.ClientID, s.RedirectURI, "ManageServices"))
+	url := fmt.Sprintf("%s?type=web_server&client_id=%s&redirect_uri=%s&scope=%s",
+		s.Oauth2.Endpoint.AuthURL, s.Oauth2.ClientID, s.Oauth2.RedirectURL, strings.Join(s.Oauth2.Scopes, ","))
+	c.Redirect(http.StatusFound, url)
 }
 
 func (s *Server) HandleCompleteLogin(c *gin.Context) {
@@ -85,28 +92,9 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 		return
 	}
 
-	vals := make(urlpkg.Values)
-	vals.Set("grant_type", "authorization_code")
-	vals.Set("client_id", s.ClientID)
-	vals.Set("client_secret", s.ClientSecret)
-	vals.Set("code", data.Code)
-	vals.Set("redirect_uri", s.RedirectURI)
-
-	res, err := s.HTTPCli.PostForm(uri, vals)
+	tok, err := s.Oauth2.Exchange(context.Background(), data.Code)
 	if err != nil {
-		c.AbortWithError(500, fmt.Errorf("making request: %w", err))
-		return
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode > 399 {
-		c.AbortWithError(500, fmt.Errorf("requesting token: status %s", res.Status))
-		return
-	}
-
-	var tok models.TokenPair
-	if err := json.NewDecoder(res.Body).Decode(&tok); err != nil {
-		c.AbortWithError(500, fmt.Errorf("decoding json: %w", err))
+		c.AbortWithError(500, fmt.Errorf("getting tokens: %w", err))
 		return
 	}
 	if err := s.MW.StoreTokens(c, tok); err != nil {
@@ -116,16 +104,15 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/")
 }
 
-func (s *Server) loadServices(token string) ([]models.ServiceType, error) {
+func (s *Server) loadServices(tok *oauth2.Token) ([]models.ServiceType, error) {
 	url := "https://api.elvanto.com/v1/services/getAll.json?page=1&page_size=100&status=published&fields[0]=volunteers"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
-	req.SetBasicAuth(token, "x")
-	req.Header.Set("Authorization", "Bearer "+token)
 
-	res, err := s.HTTPCli.Do(req)
+	cli := s.Oauth2.Client(context.Background(), tok)
+	res, err := cli.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("making request: %w", err)
 	}

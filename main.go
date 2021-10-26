@@ -13,12 +13,17 @@ import (
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
+	"golang.org/x/oauth2"
 
 	"github.com/j18e/elvanto-overview/pkg/middleware"
 	"github.com/j18e/elvanto-overview/pkg/serving"
 )
 
-const listenAddr = ":3000"
+const (
+	listenAddr = ":3000"
+	authURL    = "https://api.elvanto.com/oauth"
+	tokenURL   = "https://api.elvanto.com/oauth/token"
+)
 
 type Config struct {
 	ClientID      string `required:"true" envconfig:"CLIENT_ID"`
@@ -64,15 +69,23 @@ func run() error {
 	sm.Store = boltstore.NewWithCleanupInterval(db, time.Hour)
 	sm.Lifetime = time.Hour * 24 * 30
 
-	httpCli := &http.Client{Timeout: time.Second * 10}
-	mw := middleware.MW{HTTPCli: httpCli, SM: sm}
+	mw := middleware.MW{SM: sm}
+
+	oauth2Conf := oauth2.Config{
+		ClientID:     conf.ClientID,
+		ClientSecret: conf.ClientSecret,
+		RedirectURL:  conf.RedirectURI,
+		Scopes:       []string{"ManageServices"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   authURL,
+			TokenURL:  tokenURL,
+			AuthStyle: oauth2.AuthStyleInParams,
+		},
+	}
 
 	srv := &serving.Server{
-		ClientID:      conf.ClientID,
-		ClientSecret:  conf.ClientSecret,
-		RedirectURI:   conf.RedirectURI,
+		Oauth2:        oauth2Conf,
 		ElvantoDomain: conf.ElvantoDomain,
-		HTTPCli:       httpCli,
 		MW:            mw,
 	}
 
@@ -82,6 +95,7 @@ func run() error {
 	r.GET("/", mw.RequireTokens, srv.HandleOverview)
 	r.GET("/login", srv.HandleLogin)
 	r.GET("/login/complete", srv.HandleCompleteLogin)
+	r.GET("/logout", mw.Logout, srv.HandleNotSignedIn)
 	log.Infof("listening on %s", listenAddr)
 	return http.ListenAndServe(listenAddr, sm.LoadAndSave(r))
 }
