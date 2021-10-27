@@ -17,7 +17,7 @@ RUN go build -o ./elvanto-oversikt .
 FROM alpine:3.14
 
 COPY --from=builder /work/elvanto-oversikt .
-COPY ./template.html .
+COPY views ./views
 
 ENV GIN_MODE=release
 

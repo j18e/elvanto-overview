@@ -30,6 +30,15 @@
               "positions": {
                 "position": [
                   {
+                    "department_name": "Food service",
+                    "sub_department_name": "Kitchen team",
+                    "position_name": "Kitchen worker",
+                    "volunteers": "",
+                    "department_id": "fjw89ef3jf98jf239o823fj2fo38j",
+                    "sub_department_id": "f8jo3foj32f89hfhuihukh,jkgfjk",
+                    "position_id": "j3lij3jlakjhwgkjwhlawkh"
+                  },
+                  {
                     "department_name": "Worship and production",
                     "sub_department_name": "Vocals",
                     "position_name": "Worship Leader",

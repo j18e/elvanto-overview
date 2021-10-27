@@ -1,24 +1,7 @@
+{{ template "header" }}
+{{ template "navbar" }}
+
 {{- $elvantoDomain := .ElvantoDomain }}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
-  <title>Elvanto Overview</title>
-</head>
-<body>
-<div class="container">
-
-  <div class="navbar navbar-expand-lg navbar-light bg-light">
-    <div class="container-fluid">
-      <a href="#" class="navbar-brand">Services Overview</a>
-      <div class="d-flex">
-        <a href="/logout" class="col btn btn-primary d-flex justify-content-end">Sign out</a>
-      </div>
-    </div>
-  </div>
-
   <div class="pt-3 accordion" id="svcAccordion">
     {{- range $i, $type := .Services }}
     <div class="accordion-item">
@@ -45,11 +28,12 @@
               </a>
             </div>
           </div>
-          {{- range $dept, $positions := .Volunteers }}
-          <h5 class="pt-2">{{ $dept }}</h5>
+          {{- range .Departments }}
+          <h5 class="pt-2">{{ .Name }}</h5>
           <ul class="list-group list-group-flush">
-            {{- range $pos, $names := $positions }}
-            {{- range $names }}
+            {{- range .Positions }}
+            {{- $pos := .Name }}
+            {{- range .Volunteers }}
             <ol class="breadcrumb">
               <li class="breadcrumb-item">{{ $pos }}</li>
               <li class="breadcrumb-item">{{ . }}</li>
@@ -65,10 +49,4 @@
     {{- end }}
   </div>
 
-  <footer class="pt-3">
-    <p>Copyright 2021 Jamie Wiebe</p>
-  </footer>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
-</body>
-</html>
+{{ template "footer" }}

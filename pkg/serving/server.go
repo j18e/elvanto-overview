@@ -3,12 +3,11 @@ package serving
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 
 	"github.com/j18e/elvanto-overview/pkg/middleware"
@@ -31,14 +30,13 @@ type overviewData struct {
 
 func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		f, err := os.Open(dataFile)
+		bs, err := ioutil.ReadFile(dataFile)
 		if err != nil {
 			c.AbortWithError(500, err)
 			return
 		}
-		defer f.Close()
 
-		svcTypes, err := models.RenderServices(f)
+		svcTypes, err := models.RenderServices(bs)
 		if err != nil {
 			c.AbortWithError(500, err)
 			return
@@ -47,7 +45,7 @@ func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
 			Services:      svcTypes,
 			ElvantoDomain: elvantoDomain,
 		}
-		c.HTML(200, "template.html", data)
+		c.HTML(200, "overview.html", data)
 	}
 }
 
@@ -57,7 +55,6 @@ func (s *Server) HandleNotSignedIn(c *gin.Context) {
 }
 
 func (s *Server) HandleOverview(c *gin.Context) {
-	log.Debug("getting overview")
 	tok, _ := s.MW.GetTokens(c)
 	services, err := s.loadServices(tok)
 	if err != nil {
@@ -68,8 +65,7 @@ func (s *Server) HandleOverview(c *gin.Context) {
 		Services:      services,
 		ElvantoDomain: s.ElvantoDomain,
 	}
-	c.HTML(200, "template.html", data)
-	log.Debug("finished getting overview")
+	c.HTML(200, "overview.html", data)
 }
 
 func (s *Server) HandleLogout(c *gin.Context) {
@@ -122,7 +118,11 @@ func (s *Server) loadServices(tok *oauth2.Token) ([]models.ServiceType, error) {
 		return nil, fmt.Errorf("making request: got status %d", res.StatusCode)
 	}
 
-	serviceTypes, err := models.RenderServices(res.Body)
+	bs, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	serviceTypes, err := models.RenderServices(bs)
 	if err != nil {
 		return nil, err
 	}

@@ -90,7 +90,7 @@ func run() error {
 	}
 
 	r := gin.Default()
-	r.LoadHTMLGlob("template.html")
+	r.LoadHTMLGlob("./views/*")
 
 	r.GET("/", mw.RequireTokens, srv.HandleOverview)
 	r.GET("/login", srv.HandleLogin)
@@ -106,7 +106,7 @@ func runDry() error {
 		log.Warn("elvanto domain not set")
 	}
 	r := gin.Default()
-	r.LoadHTMLGlob("template.html")
+	r.LoadHTMLGlob("./views/*")
 	r.GET("/", serving.DryRunHandler("example-data.json", elvantoDomain))
 	return r.Run(listenAddr)
 }

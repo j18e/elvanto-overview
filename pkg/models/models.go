@@ -1,56 +1,12 @@
 package models
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"sort"
 	"strings"
+
+	"github.com/tidwall/gjson"
 )
-
-type TokenPair struct {
-	Access  string `json:"access_token"`
-	Refresh string `json:"refresh_token"`
-}
-
-func RenderServices(r io.Reader) ([]ServiceType, error) {
-	var data ServicesResponse
-	if err := json.NewDecoder(r).Decode(&data); err != nil {
-		return nil, fmt.Errorf("unmarshaling json: %w", err)
-	}
-	services := make(map[string][]Service)
-	for _, svc := range data.Services.Service {
-		date := strings.Split(svc.Date, " ")[0]
-		volunteers := make(map[string]map[string][]string)
-		for _, vol := range svc.Volunteers {
-			if volunteers[vol.Department] == nil {
-				volunteers[vol.Department] = make(map[string][]string)
-			}
-			volunteers[vol.Department][vol.Position] = append(volunteers[vol.Department][vol.Position], vol.Name)
-		}
-		service := Service{
-			Name:       svc.Name,
-			ID:         svc.ID,
-			Location:   svc.Location.Name,
-			Date:       date,
-			Volunteers: volunteers,
-		}
-		services[svc.Type.Name] = append(services[svc.Type.Name], service)
-	}
-	var serviceTypes []ServiceType
-	for t, sx := range services {
-		serviceTypes = append(serviceTypes, ServiceType{
-			Type:     t,
-			Services: sx,
-		})
-	}
-
-	sort.Slice(serviceTypes, func(i, j int) bool {
-		return serviceTypes[i].Type < serviceTypes[j].Type
-	})
-
-	return serviceTypes, nil
-}
 
 type ServiceType struct {
 	Type     string
@@ -58,108 +14,80 @@ type ServiceType struct {
 }
 
 type Service struct {
+	Name        string
+	ID          string
+	Location    string
+	Date        string
+	Departments []Department
+}
+
+type Department struct {
+	Name      string
+	Positions []Position
+}
+
+type Position struct {
 	Name       string
-	ID         string
-	Location   string
-	Date       string
-	Volunteers map[string]map[string][]string
+	Volunteers []string
 }
 
-type Volunteer struct {
-	Name       string
-	Department string
-	Position   string
-}
-
-func (v Volunteer) String() string {
-	return fmt.Sprintf("%s/%s: %s", v.Department, v.Position, v.Name)
-}
-
-type ServicesResponse struct {
-	GeneratedIn string `json:"generated_in"`
-	Services    struct {
-		// OnThisPage int    `json:"on_this_page"`
-		// Page       string `json:"page"`
-		// PerPage    string `json:"per_page"`
-		Service []struct {
-			ID           string `json:"id"`
-			Date         string `json:"date"`
-			DateAdded    string `json:"date_added"`
-			DateModified string `json:"date_modified"`
-			Description  string `json:"description"`
-			Location     struct {
-				Name string `json:"name"`
-			} `json:"location"`
-			Name string `json:"name"`
-			Type struct {
-				Name string `json:"name"`
-			} `json:"service_type"`
-			Status     int           `json:"status"`
-			Volunteers VolunteerList `json:"volunteers"`
-		} `json:"service"`
-		Total int `json:"total"`
-	} `json:"services"`
-	Status string `json:"status"`
-}
-
-type VolunteerList []Volunteer
-
-func (vl *VolunteerList) UnmarshalJSON(bs []byte) error {
-	var data struct {
-		Plan []struct {
-			Positions struct {
-				Position []struct {
-					Department    string             `json:"department_name"`
-					Position      string             `json:"position_name"`
-					SubDepartment string             `json:"sub_department_name"`
-					Volunteers    ResponseVolunteers `json:"volunteers"`
-				} `json:"position"`
-			} `json:"positions"`
-		} `json:"plan"`
+func RenderServices(bs []byte) ([]ServiceType, error) {
+	if !gjson.ValidBytes(bs) {
+		return nil, errors.New("invalid json")
 	}
-	if err := json.Unmarshal(bs, &data); err != nil {
-		return err
+	svcList := gjson.GetBytes(bs, "services.service")
+	if !svcList.IsArray() {
+		return nil, fmt.Errorf("services.service: expected array, got %v", svcList.Type)
 	}
-	var res VolunteerList
-	for _, plan := range data.Plan {
-		for _, pos := range plan.Positions.Position {
-			for _, vol := range pos.Volunteers {
-				res = append(res, Volunteer{
-					Name:       vol,
-					Department: pos.Department,
-					Position:   pos.Position,
-				})
+
+	serviceTypes := make(map[string][]Service)
+	for _, svc := range svcList.Array() {
+		st := svc.Get("service_type.name").String()
+		serviceTypes[st] = append(serviceTypes[st], Service{
+			Name:        svc.Get("name").String(),
+			ID:          svc.Get("id").String(),
+			Location:    svc.Get("location.name").String(),
+			Date:        strings.Split(svc.Get("date").String(), " ")[0],
+			Departments: getDepartments(svc.Get("volunteers")),
+		})
+	}
+
+	var res []ServiceType
+	for st, sx := range serviceTypes {
+		res = append(res, ServiceType{Type: st, Services: sx})
+	}
+	return res, nil
+}
+
+func getDepartments(json gjson.Result) []Department {
+	depts := make(map[string][]Position)
+	for _, plan := range json.Get("plan").Array() {
+		for _, pos := range plan.Get("positions.position").Array() {
+			if pos.Get("volunteers").String() == "" {
+				continue
 			}
+			dept := pos.Get("department_name").String()
+			depts[dept] = append(depts[dept], Position{
+				Name:       pos.Get("position_name").String(),
+				Volunteers: volunteerNames(pos.Get("volunteers.volunteer")),
+			})
 		}
 	}
-	*vl = res
-	return nil
+	var res []Department
+	for d, px := range depts {
+		res = append(res, Department{
+			Name:      d,
+			Positions: px,
+		})
+	}
+	return res
 }
 
-type ResponseVolunteers []string
-
-func (v *ResponseVolunteers) UnmarshalJSON(bs []byte) error {
-	if string(bs) == `""` {
-		return nil
-	}
-	var data struct {
-		Volunteer []struct {
-			Person struct {
-				Firstname     string `json:"firstname"`
-				Lastname      string `json:"lastname"`
-				MiddleName    string `json:"middle_name"`
-				PreferredName string `json:"preferred_name"`
-			} `json:"person"`
-			Status string `json:"status"`
-		} `json:"volunteer"`
-	}
-	if err := json.Unmarshal(bs, &data); err != nil {
-		return err
-	}
+func volunteerNames(json gjson.Result) []string {
 	var res []string
-	for _, pers := range data.Volunteer {
-		res = append(res, fmt.Sprintf("%s %s", pers.Person.Firstname, pers.Person.Lastname))
-	}
-	*v = res
-	return nil
+	json.ForEach(func(_, val gjson.Result) bool {
+		res = append(res, fmt.Sprintf("%s %s", val.Get("person.firstname").String(), val.Get("person.lastname").String()))
+		return true
+	})
+	return res
 }
