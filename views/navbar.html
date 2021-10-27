@@ -1,10 +1,35 @@
 {{- define "navbar" }}
 <div class="navbar navbar-expand-lg navbar-light bg-light">
   <div class="container-fluid">
-    <a href="#" class="navbar-brand">Services Overview</a>
-    <div class="d-flex">
-      <a href="/logout" class="col btn btn-primary d-flex justify-content-end">Sign out</a>
+    <a href="/" class="navbar-brand">Elvanto Overview</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+      {{- if not .LoggedOut }}
+      <div class="d-flex">
+        <a href="/" class="mx-1 btn btn-primary d-flex justify-content-end">Profile</a>
+        <a href="/logout" class="mx-1 btn btn-primary d-flex justify-content-end">Log out</a>
+      </div>
+      {{- end }}
     </div>
-  </div>
 </div>
+
+<!-- <nav class="navbar navbar-expand-lg navbar-light bg-light"> -->
+<!--   <div class="container-fluid"> -->
+<!--     <a class="navbar-brand" href="#">Elvanto Overview</a> -->
+<!--     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"> -->
+<!--       <span class="navbar-toggler-icon"></span> -->
+<!--     </button> -->
+<!--     <div class="collapse navbar-collapse" id="navbarNav"> -->
+<!--       <ul class="navbar-nav"> -->
+<!--         <li class="nav-item"> -->
+<!--           <a class="nav-link active" href="/">Profile</a> -->
+<!--         </li> -->
+<!--         <li class="nav-item"> -->
+<!--           <a class="nav-link active" href="#">Log out</a> -->
+<!--         </li> -->
+<!--       </ul> -->
+<!--     </div> -->
+<!--   </div> -->
+<!-- </nav> -->
 {{- end }}

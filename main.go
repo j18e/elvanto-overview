@@ -76,7 +76,7 @@ func run() error {
 		ClientID:     conf.ClientID,
 		ClientSecret: conf.ClientSecret,
 		RedirectURL:  conf.RedirectURI,
-		Scopes:       []string{"ManageServices"},
+		Scopes:       []string{"ManageServices", "ManagePeople"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   authURL,
 			TokenURL:  tokenURL,
@@ -93,10 +93,11 @@ func run() error {
 	r := gin.Default()
 	r.LoadHTMLGlob(tplGlob)
 
-	r.GET("/", mw.RequireTokens, srv.HandleOverview)
+	r.GET("/", mw.RequireTokens, srv.HandleUser)
+	r.GET("/overview", mw.RequireTokens, srv.HandleOverview)
 	r.GET("/login", srv.HandleLogin)
 	r.GET("/login/complete", srv.HandleCompleteLogin)
-	r.GET("/logout", mw.Logout, srv.HandleNotSignedIn)
+	r.GET("/logout", mw.Logout, srv.HandleLoggedOut)
 	log.Infof("listening on %s", listenAddr)
 	return http.ListenAndServe(listenAddr, sm.LoadAndSave(r))
 }

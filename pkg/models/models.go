@@ -8,6 +8,38 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+var ErrInvalidJSON = errors.New("invalid json")
+
+type User struct {
+	Name   string
+	Email  string
+	Status string
+	Tags   []string
+}
+
+func (u *User) addTag(s string) {
+	u.Tags = append(u.Tags, s)
+}
+
+func (u *User) UnmarshalJSON(bs []byte) error {
+	fmt.Println(string(bs))
+	if !gjson.ValidBytes(bs) {
+		return ErrInvalidJSON
+	}
+	json := gjson.GetBytes(bs, "person.0")
+	u.Name = fmt.Sprintf("%s %s", json.Get("firstname"), json.Get("lastname"))
+	u.Email = json.Get("email").String()
+	u.Status = json.Get("status").String()
+	for _, tag := range []string{"admin", "volunteer"} {
+		if json.Get(tag).Int() == 1 {
+			u.addTag(tag)
+		}
+	}
+	return nil
+}
+
+type ServiceTypeList []ServiceType
+
 type ServiceType struct {
 	Type     string
 	Services []Service
@@ -31,13 +63,13 @@ type Position struct {
 	Volunteers []string
 }
 
-func RenderServices(bs []byte) ([]ServiceType, error) {
+func (stl *ServiceTypeList) UnmarshalJSON(bs []byte) error {
 	if !gjson.ValidBytes(bs) {
-		return nil, errors.New("invalid json")
+		return ErrInvalidJSON
 	}
 	svcList := gjson.GetBytes(bs, "services.service")
 	if !svcList.IsArray() {
-		return nil, fmt.Errorf("services.service: expected array, got %v", svcList.Type)
+		return fmt.Errorf("services.service: expected array, got %v", svcList.Type)
 	}
 
 	serviceTypes := make(map[string][]Service)
@@ -56,7 +88,8 @@ func RenderServices(bs []byte) ([]ServiceType, error) {
 	for st, sx := range serviceTypes {
 		res = append(res, ServiceType{Type: st, Services: sx})
 	}
-	return res, nil
+	(*stl) = res
+	return nil
 }
 
 func getDepartments(json gjson.Result) []Department {

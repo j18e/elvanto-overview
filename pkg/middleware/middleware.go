@@ -1,56 +1,65 @@
 package middleware
 
 import (
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/j18e/elvanto-overview/pkg/models"
 	"golang.org/x/oauth2"
 )
 
-const keyTokens = "user_tokens"
+func init() {
+	gob.Register(oauth2.Token{})
+	gob.Register(models.User{})
+}
 
-var errNoTokens = errors.New("tokens not found")
+const (
+	keyTokens = "user_tokens"
+	keyUser   = "user_profile"
+)
+
+var (
+	errNoTokens = errors.New("tokens not found")
+	errNoUser   = errors.New("user profile not found")
+)
 
 type MW struct {
 	SM *scs.SessionManager
 }
 
-func (mw *MW) GetTokens(c *gin.Context) (*oauth2.Token, error) {
-	bs := mw.SM.GetBytes(c.Request.Context(), keyTokens)
-	if bs == nil {
-		return nil, errNoTokens
+func (mw *MW) GetTokens(c *gin.Context) *oauth2.Token {
+	tok, ok := mw.SM.Get(c.Request.Context(), keyTokens).(oauth2.Token)
+	if !ok {
+		return nil
 	}
-	var tok oauth2.Token
-	if err := json.Unmarshal(bs, &tok); err != nil {
-		return nil, err
-	}
-	return &tok, nil
+	return &tok
 }
 
-func (mw *MW) StoreTokens(c *gin.Context, tok *oauth2.Token) error {
-	bs, err := json.Marshal(tok)
-	if err != nil {
-		return err
+func (mw *MW) StoreTokens(c *gin.Context, tok *oauth2.Token) {
+	mw.SM.Put(c.Request.Context(), keyTokens, *tok)
+}
+
+func (mw *MW) GetUser(c *gin.Context) *models.User {
+	user, ok := mw.SM.Get(c.Request.Context(), keyUser).(models.User)
+	if !ok {
+		return nil
 	}
-	mw.SM.Put(c.Request.Context(), keyTokens, bs)
-	return nil
+	return &user
+}
+
+func (mw *MW) StoreUser(c *gin.Context, user models.User) {
+	mw.SM.Put(c.Request.Context(), keyUser, user)
 }
 
 func (mw *MW) RequireTokens(c *gin.Context) {
-	_, err := mw.GetTokens(c)
-	switch err {
-	case nil:
-		c.Next()
-	case errNoTokens:
+	tok := mw.GetTokens(c)
+	if tok == nil {
 		c.Redirect(http.StatusFound, "/login")
 		c.Abort()
-	default:
-		c.AbortWithError(500, err)
-		fmt.Fprint(c.Writer, "an unexpected error occurred")
 	}
 }
 
