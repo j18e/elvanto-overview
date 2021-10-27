@@ -23,6 +23,7 @@ const (
 	listenAddr = ":3000"
 	authURL    = "https://api.elvanto.com/oauth"
 	tokenURL   = "https://api.elvanto.com/oauth/token"
+	tplGlob    = "./views/*"
 )
 
 type Config struct {
@@ -90,7 +91,7 @@ func run() error {
 	}
 
 	r := gin.Default()
-	r.LoadHTMLGlob("./views/*")
+	r.LoadHTMLGlob(tplGlob)
 
 	r.GET("/", mw.RequireTokens, srv.HandleOverview)
 	r.GET("/login", srv.HandleLogin)
@@ -106,7 +107,7 @@ func runDry() error {
 		log.Warn("elvanto domain not set")
 	}
 	r := gin.Default()
-	r.LoadHTMLGlob("./views/*")
+	r.LoadHTMLGlob(tplGlob)
 	r.GET("/", serving.DryRunHandler("example-data.json", elvantoDomain))
 	return r.Run(listenAddr)
 }

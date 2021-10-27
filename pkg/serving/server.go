@@ -16,6 +16,8 @@ import (
 
 const keyTokens = "user_tokens"
 
+var tplOverview = "overview.html"
+
 type Server struct {
 	Oauth2        oauth2.Config
 	Domain        string
@@ -45,7 +47,7 @@ func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
 			Services:      svcTypes,
 			ElvantoDomain: elvantoDomain,
 		}
-		c.HTML(200, "overview.html", data)
+		c.HTML(200, tplOverview, data)
 	}
 }
 
@@ -65,7 +67,7 @@ func (s *Server) HandleOverview(c *gin.Context) {
 		Services:      services,
 		ElvantoDomain: s.ElvantoDomain,
 	}
-	c.HTML(200, "overview.html", data)
+	c.HTML(200, tplOverview, data)
 }
 
 func (s *Server) HandleLogout(c *gin.Context) {
