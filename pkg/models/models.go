@@ -10,34 +10,6 @@ import (
 
 var ErrInvalidJSON = errors.New("invalid json")
 
-type User struct {
-	Name   string
-	Email  string
-	Status string
-	Tags   []string
-}
-
-func (u *User) addTag(s string) {
-	u.Tags = append(u.Tags, s)
-}
-
-func (u *User) UnmarshalJSON(bs []byte) error {
-	fmt.Println(string(bs))
-	if !gjson.ValidBytes(bs) {
-		return ErrInvalidJSON
-	}
-	json := gjson.GetBytes(bs, "person.0")
-	u.Name = fmt.Sprintf("%s %s", json.Get("firstname"), json.Get("lastname"))
-	u.Email = json.Get("email").String()
-	u.Status = json.Get("status").String()
-	for _, tag := range []string{"admin", "volunteer"} {
-		if json.Get(tag).Int() == 1 {
-			u.addTag(tag)
-		}
-	}
-	return nil
-}
-
 type ServiceTypeList []ServiceType
 
 type ServiceType struct {

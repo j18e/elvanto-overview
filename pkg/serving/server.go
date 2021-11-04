@@ -2,32 +2,43 @@ package serving
 
 import (
 	"context"
+	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/sessions"
 	"golang.org/x/oauth2"
 
-	"github.com/j18e/elvanto-overview/pkg/middleware"
 	"github.com/j18e/elvanto-overview/pkg/models"
 )
+
+func init() {
+	gob.Register(&oauth2.Token{})
+}
 
 const (
 	elvantoAPI = "https://api.elvanto.com/v1"
 
 	tplOverview  = "overview.html"
-	tplUser      = "user.html"
 	tplLoggedOut = "logged_out.html"
+
+	cookieName = "elvanto_overview"
+	keyToken   = "tokens"
 )
+
+var errNoTokens = errors.New("tokens not found")
 
 type Server struct {
 	Oauth2        oauth2.Config
 	Domain        string
 	ElvantoDomain string
-	MW            middleware.MW
+	Store         *sessions.CookieStore
 }
 
 type overviewData struct {
@@ -35,45 +46,21 @@ type overviewData struct {
 	ElvantoDomain string
 }
 
-func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		bs, err := ioutil.ReadFile(dataFile)
-		if err != nil {
-			c.AbortWithError(500, err)
-			return
-		}
-
-		var svcTypes []models.ServiceType
-		if err := json.Unmarshal(bs, &svcTypes); err != nil {
-			c.AbortWithError(500, err)
-			return
-		}
-		data := overviewData{
-			Services:      svcTypes,
-			ElvantoDomain: elvantoDomain,
-		}
-		c.HTML(200, tplOverview, data)
-	}
-}
-
-func (s *Server) HandleUser(c *gin.Context) {
-	user := s.MW.GetUser(c)
-	if user == nil {
-		tok := s.MW.GetTokens(c)
-		var err error
-		user, err = s.currentUser(tok)
-		if err != nil {
-			c.AbortWithError(500, err)
-			return
-		}
-		s.MW.StoreUser(c, *user)
-	}
-	c.HTML(200, tplUser, user)
-}
-
 func (s *Server) HandleOverview(c *gin.Context) {
-	tok := s.MW.GetTokens(c)
-	services, err := s.loadServices(tok)
+	tok, err := s.getToken(c)
+	if errors.Is(err, errNoTokens) {
+		c.HTML(200, tplLoggedOut, map[string]bool{"LoggedOut": true})
+		return
+	}
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+	tok, err = s.refreshTokenIfNeeded(c, tok)
+	if err != nil {
+		c.Error(fmt.Errorf("refreshing token: %w", err))
+	}
+	services, err := s.loadServices(c, tok)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
@@ -85,7 +72,16 @@ func (s *Server) HandleOverview(c *gin.Context) {
 	c.HTML(200, tplOverview, data)
 }
 
-func (s *Server) HandleLoggedOut(c *gin.Context) {
+func (s *Server) HandleLogout(c *gin.Context) {
+	sess, err := s.Store.Get(c.Request, cookieName)
+	if err != nil {
+		c.AbortWithError(500, fmt.Errorf("getting session: %w", err))
+		return
+	}
+	sess.Values[keyToken] = nil
+	if err := sess.Save(c.Request, c.Writer); err != nil {
+		c.AbortWithError(500, fmt.Errorf("saving session: %w", err))
+	}
 	c.HTML(200, tplLoggedOut, map[string]bool{"LoggedOut": true})
 }
 
@@ -111,18 +107,21 @@ func (s *Server) HandleCompleteLogin(c *gin.Context) {
 		c.AbortWithError(500, fmt.Errorf("getting tokens: %w", err))
 		return
 	}
-	s.MW.StoreTokens(c, tok)
+	if err := s.saveToken(c, tok); err != nil {
+		c.AbortWithError(500, fmt.Errorf("saving tokens: %w", err))
+		return
+	}
 	c.Redirect(http.StatusFound, "/")
 }
 
-func (s *Server) loadServices(tok *oauth2.Token) ([]models.ServiceType, error) {
+func (s *Server) loadServices(c *gin.Context, tok *oauth2.Token) ([]models.ServiceType, error) {
 	const url = elvantoAPI + "/services/getAll.json?page=1&page_size=100&status=published&fields[0]=volunteers"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	cli := s.Oauth2.Client(context.Background(), tok)
+	cli := s.Oauth2.Client(c.Request.Context(), tok)
 	res, err := cli.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("making request: %w", err)
@@ -140,26 +139,63 @@ func (s *Server) loadServices(tok *oauth2.Token) ([]models.ServiceType, error) {
 	return stl, nil
 }
 
-func (s *Server) currentUser(tok *oauth2.Token) (*models.User, error) {
-	const url = elvantoAPI + "/people/currentUser.json"
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+func (s *Server) saveToken(c *gin.Context, tok *oauth2.Token) error {
+	sess, err := s.Store.Get(c.Request, cookieName)
 	if err != nil {
-		return nil, fmt.Errorf("get current user: %w", err)
+		return fmt.Errorf("getting session: %w", err)
 	}
+	sess.Values[keyToken] = tok
+	if err := sess.Save(c.Request, c.Writer); err != nil {
+		return fmt.Errorf("saving session: %w", err)
+	}
+	return nil
+}
 
-	cli := s.Oauth2.Client(context.Background(), tok)
-	res, err := cli.Do(req)
+func (s *Server) getToken(c *gin.Context) (*oauth2.Token, error) {
+	sess, err := s.Store.Get(c.Request, cookieName)
 	if err != nil {
-		return nil, fmt.Errorf("get current user: %w", err)
+		return nil, fmt.Errorf("getting session: %w", err)
 	}
-	defer res.Body.Close()
+	iface := sess.Values[keyToken]
+	tok, ok := iface.(*oauth2.Token)
+	if !ok {
+		return nil, errNoTokens
+	}
+	return tok, nil
+}
 
-	if res.StatusCode > 399 {
-		return nil, fmt.Errorf("get current user: got status %d", res.StatusCode)
+func (s *Server) refreshTokenIfNeeded(c *gin.Context, tok *oauth2.Token) (*oauth2.Token, error) {
+	sessExpiry := time.Second * time.Duration(s.Store.Options.MaxAge)
+	if time.Until(tok.Expiry) > sessExpiry {
+		return tok, nil
 	}
-	var u models.User
-	if err := json.NewDecoder(res.Body).Decode(&u); err != nil {
-		return nil, fmt.Errorf("get current user: %w", err)
+	newTok, err := s.Oauth2.TokenSource(c.Request.Context(), tok).Token()
+	if err != nil {
+		return tok, err
 	}
-	return &u, nil
+	if err := s.saveToken(c, tok); err != nil {
+		return tok, err
+	}
+	return newTok, nil
+}
+
+func DryRunHandler(dataFile, elvantoDomain string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		bs, err := ioutil.ReadFile(dataFile)
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+
+		var svcTypes []models.ServiceType
+		if err := json.Unmarshal(bs, &svcTypes); err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+		data := overviewData{
+			Services:      svcTypes,
+			ElvantoDomain: elvantoDomain,
+		}
+		c.HTML(200, tplOverview, data)
+	}
 }

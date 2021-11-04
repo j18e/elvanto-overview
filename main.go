@@ -4,18 +4,14 @@ import (
 	"flag"
 	"net/http"
 	"os"
-	"time"
 
-	"github.com/alexedwards/scs/boltstore"
-	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/sessions"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
-	"go.etcd.io/bbolt"
 	"golang.org/x/oauth2"
 
-	"github.com/j18e/elvanto-overview/pkg/middleware"
 	"github.com/j18e/elvanto-overview/pkg/serving"
 )
 
@@ -30,7 +26,7 @@ type Config struct {
 	ClientID      string `required:"true" envconfig:"CLIENT_ID"`
 	ClientSecret  string `required:"true" envconfig:"CLIENT_SECRET"`
 	RedirectURI   string `required:"true" envconfig:"REDIRECT_URI"`
-	DataFile      string `required:"true" envconfig:"DATA_FILE"`
+	CookieSecret  string `required:"true" envconfig:"COOKIE_SECRET"`
 	ElvantoDomain string `required:"true" envconfig:"ELVANTO_DOMAIN"`
 }
 
@@ -60,23 +56,11 @@ func run() error {
 		return err
 	}
 
-	db, err := bbolt.Open(conf.DataFile, 0600, nil)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	sm := scs.New()
-	sm.Store = boltstore.NewWithCleanupInterval(db, time.Hour)
-	sm.Lifetime = time.Hour * 24 * 30
-
-	mw := middleware.MW{SM: sm}
-
 	oauth2Conf := oauth2.Config{
 		ClientID:     conf.ClientID,
 		ClientSecret: conf.ClientSecret,
 		RedirectURL:  conf.RedirectURI,
-		Scopes:       []string{"ManageServices", "ManagePeople"},
+		Scopes:       []string{"ManageServices"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   authURL,
 			TokenURL:  tokenURL,
@@ -87,19 +71,18 @@ func run() error {
 	srv := &serving.Server{
 		Oauth2:        oauth2Conf,
 		ElvantoDomain: conf.ElvantoDomain,
-		MW:            mw,
+		Store:         sessions.NewCookieStore([]byte(conf.CookieSecret)),
 	}
 
 	r := gin.Default()
 	r.LoadHTMLGlob(tplGlob)
 
-	r.GET("/", mw.RequireTokens, srv.HandleUser)
-	r.GET("/overview", mw.RequireTokens, srv.HandleOverview)
+	r.GET("/", srv.HandleOverview)
 	r.GET("/login", srv.HandleLogin)
 	r.GET("/login/complete", srv.HandleCompleteLogin)
-	r.GET("/logout", mw.Logout, srv.HandleLoggedOut)
+	r.GET("/logout", srv.HandleLogout)
 	log.Infof("listening on %s", listenAddr)
-	return http.ListenAndServe(listenAddr, sm.LoadAndSave(r))
+	return http.ListenAndServe(listenAddr, r)
 }
 
 func runDry() error {
